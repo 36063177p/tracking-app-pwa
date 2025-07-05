@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>نظام إدارة الطلبات</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+    <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
+    <!-- إضافة مكتبة SheetJS قبل script app.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- إضافة مكتبة Chart.js قبل script app.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- إضافة مكتبة html2pdf -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script defer data-domain="magenta-shelby-54.tiiny.site" src="https://analytics.tiiny.site/js/plausible.js"></script></head>
+<body>
+    <!-- قسم تسجيل الدخول -->
+    <div id="loginSection" class="auth-section">
+        <h2>تسجيل الدخول</h2>
+        <form id="loginForm">
+            <input type="email" id="loginEmail" placeholder="البريد الإلكتروني" required>
+            <input type="password" id="loginPassword" placeholder="كلمة المرور" required>
+            <button type="submit">دخول</button>
+        </form>
+    </div>
+
+    <!-- إضافة أزرار التبويب -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="dashboard">لوحة المعلومات</button>
+        <button class="tab-btn" data-tab="orders">الطلبات</button>
+        <button class="tab-btn" data-tab="shipments">الشحنات</button>
+        <button class="tab-btn" data-tab="customs">التخليص الجمركي</button>
+        <button class="tab-btn" data-tab="costs">التكاليف الإضافية</button>
+        <button class="tab-btn" data-tab="inventory">المخزون</button>
+        <button class="tab-btn" data-tab="seasonalPlans">خطط الشراء الموسمية</button>
+        <!-- إضافة زر الإشعارات -->
+        <div class="notifications-trigger">
+            <button id="notificationsBtn" class="notifications-btn">
+                <i class="fas fa-bell"></i>
+                <span id="notificationsBadge" class="notifications-badge">0</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- قسم الطلبات (يظهر بعد تسجيل الدخول) -->
+    <div id="ordersSection" class="tab-content hidden">
+        <h1>إدارة الطلبات</h1>
+        <div class="controls-container">
+            <button id="addOrderBtn" class="primary-btn">إضافة طلب جديد</button>
+            
+            <!-- إضافة قسم البحث والتصفية -->
+            <div class="search-filters">
+                <input type="text" id="searchInput" placeholder="بحث...">
+                <select id="statusFilter">
+                    <option value="all">جميع الحالات</option>
+                    <option value="قيد التصنيع">قيد التصنيع</option>
+                    <option value="تم الشحن">تم الشحن</option>
+                </select>
+                <select id="dateFilter">
+                    <option value="all">جميع التواريخ</option>
+                    <option value="today">اليوم</option>
+                    <option value="week">هذا الأسبوع</option>
+                    <option value="month">هذا الشهر</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table id="ordersTable">
+                <thead>
+                    <tr>
+                        <th>رقم الطلب</th>
+                        <th>الشركة الموردة</th>
+                        <th>نوع البضاعة</th>
+                        <th>الكمية</th>
+                        <th>الوحدة</th>
+                        <th>عدد البكج</th>
+                        <th>تاريخ الطلب</th>
+                        <th>تاريخ الانتهاء</th>
+                        <th>قيمة الحاوية</th>
+                        <th>أجور الحجز</th>
+                        <th>القيمة الإجمالية</th>
+                        <th>تكلفة الوحدة</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- قسم الشحنات -->
+    <div id="shipmentsSection" class="tab-content hidden">
+        <h1>إدارة الشحنات</h1>
+        <div class="controls-container">
+            <button id="addShipmentBtn" class="primary-btn">إضافة شحنة جديدة</button>
+            
+            <div class="search-container">
+                <input type="text" id="shipmentSearch" placeholder="ابحث عن الشحنات...">
+                <select id="filterStatus">
+                    <option value="all">جميع الحالات</option>
+                    <option value="في الطريق">في الطريق</option>
+                    <option value="تم الوصول">تم الوصول</option>
+                    <option value="تم الاستلام">تم الاستلام</option>
+                </select>
+                <!-- إضافة تصفية التواريخ -->
+                <div class="date-filter">
+                    <input type="date" id="startDate" placeholder="من تاريخ">
+                    <input type="date" id="endDate" placeholder="إلى تاريخ">
+                </div>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table id="shipmentsTable">
+                <thead>
+                    <tr>
+                        <th>رقم BL</th>
+                        <th>رقم الحاوية</th>
+                        <th>نوع البضاعة</th>
+                        <th>الكمية</th>
+                        <th>الوحدة</th>
+                        <th>تاريخ الشحن</th>
+                        <th>موعد الوصول</th>
+                        <th>شركة الشحن</th>
+                        <th>الحالة</th>
+                        <th>المستندات</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="shipmentsTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- قسم التخليص الجمركي -->
+    <div id="customsSection" class="tab-content hidden">
+        <h1>إدارة التخليص الجمركي</h1>
+        <div class="controls-container">
+            <button id="addCustomsBtn" class="primary-btn">إضافة تخليص جمركي جديد</button>
+            
+            <div class="search-filters">
+                <input type="text" id="customsSearchInput" placeholder="بحث...">
+                <select id="customsCountryFilter">
+                    <option value="all">جميع البلدان</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table id="customsTable">
+                <thead>
+                    <tr>
+                        <th>بلد التخليص</th>
+                        <th>نوع البضاعة</th>
+                        <th>الكمية</th>
+                        <th>التكلفة الجمركية</th>
+                        <th>تكلفة المتر</th>
+                        <th>تاريخ البدء</th>
+                        <th>تاريخ الانتهاء</th>
+                        <th>الموظف المسؤول</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="customsTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- قسم التكاليف الإضافية -->
+    <div id="costsSection" class="tab-content hidden">
+        <h1>إدارة التكاليف الإضافية</h1>
+        <div class="controls-container">
+            <button id="addCostBtn" class="primary-btn">إضافة تكلفة جديدة</button>
+            
+            <div class="search-filters">
+                <input type="text" id="costSearchInput" placeholder="بحث...">
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table id="costsTable">
+                <thead>
+                    <tr>
+                        <th>رقم الشحنة</th>
+                        <th>الوصف</th>
+                        <th>القيمة</th>
+                        <th>تكلفة المتر</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="costsTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- قسم المخزون -->
+    <div id="inventorySection" class="tab-content hidden">
+        <h1>إدارة المخزون</h1>
+        <div class="controls-container">
+            <button id="addInventoryBtn" class="primary-btn">إضافة مخزون جديد</button>
+            
+            <div class="search-filters">
+                <input type="text" id="inventorySearchInput" placeholder="بحث...">
+                <select id="branchFilter">
+                    <option value="all">جميع الفروع</option>
+                    <option value="الحسكة">الحسكة</option>
+                    <option value="الرقة">الرقة</option>
+                    <option value="حلب">حلب</option>
+                    <option value="دير الزور">دير الزور</option>
+                    <option value="منبج">منبج</option>
+                    <option value="أخرى">أخرى</option>
+                </select>
+                <select id="statusFilter">
+                    <option value="all">جميع الحالات</option>
+                    <option value="مطابق">مطابق</option>
+                    <option value="غير مطابق">غير مطابق</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <table id="inventoryTable">
+                <thead>
+                    <tr>
+                        <th>رقم الجرد</th>
+                        <th>رقم الشحنة</th>
+                        <th>نوع البضاعة</th>
+                        <th>الكمية المستوردة</th>
+                        <th>الكمية المستلمة</th>
+                        <th>فرع الاستلام</th>
+                        <th>إجمالي تكلفة الحاوية</th>
+                        <th>التكلفة النهائية للوحدة</th>
+                        <th>سعر الشراء</th>
+                        <th>سعر التكلفة</th>
+                        <th>سعر المبيع</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- تحديث قسم لوحة المعلومات -->
+    <div id="dashboardSection" class="tab-content">
+        <div class="dashboard-container">
+            <!-- تحريك قسم الشحنات القادمة إلى المقدمة -->
+            <div class="upcoming-shipments-section">
+                <div class="section-header">
+                    <h3>الشحنات القادمة</h3>
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-days="7">أسبوع</button>
+                        <button class="filter-btn" data-days="14">أسبوعين</button>
+                        <button class="filter-btn" data-days="30">شهر</button>
+                    </div>
+                </div>
+                <div class="shipments-grid" id="upcomingShipmentsGrid"></div>
+            </div>
+
+            <!-- بطاقة قيمة الحاويات القادمة (تم نقلها لتظهر بعد قسم الشحنات القادمة) -->
+            <div class="container-value-section">
+                <div class="stat-card highlighted-card">
+                    <h3>قيمة الحاويات القادمة</h3>
+                    <div class="stat-value" id="upcomingContainersValue">0</div>
+                    <div class="stat-details">
+                        <span id="weekContainerValue">0 خلال أسبوع</span>
+                        <span id="twoWeeksContainerValue">0 خلال أسبوعين</span>
+                        <span id="monthContainerValue">0 خلال شهر</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- البطاقات الإحصائية -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>إحصائيات الطلبات</h3>
+                    <div class="stat-value" id="totalOrders">0</div>
+                    <div class="stat-details">
+                        <span id="inProgressOrders">0 قيد التصنيع</span>
+                        <span id="shippedOrders">0 تم الشحن</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>إحصائيات الشحنات</h3>
+                    <div class="stat-value" id="totalShipments">0</div>
+                    <div class="stat-details">
+                        <span id="inTransitShipments">0 في الطريق</span>
+                        <span id="arrivedShipments">0 تم الوصول</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>الشحنات القادمة خلال أسبوع</h3>
+                    <div class="stat-value" id="upcomingWeekShipments">0</div>
+                    <div class="stat-details">
+                        <span id="nextThreeDays">0 خلال 3 أيام</span>
+                        <span id="nextWeek">0 خلال أسبوع</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>حالة المستندات</h3>
+                    <div class="stat-value" id="totalDocuments">0</div>
+                    <div class="stat-details">
+                        <span id="completeDocuments">0 مكتملة</span>
+                        <span id="incompleteDocuments">0 ناقصة</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- باقي العناصر -->
+            <div class="notifications-section">
+                <div class="notifications-header">
+                    <h3>إعدادات الإشعارات</h3>
+                    <button id="configureWhatsApp" class="whatsapp-btn">
+                        <i class="fab fa-whatsapp"></i>
+                        إعداد WhatsApp
+                    </button>
+                </div>
+                
+                <div class="notification-settings">
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="orderNotifications" checked>
+                            تنبيهات الطلبات الجديدة
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="shipmentNotifications" checked>
+                            تنبيهات وصول الشحنات
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="inventoryNotifications" checked>
+                            تنبيهات المخزون
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recent-activities">
+                <h3>الأنشطة الأخيرة</h3>
+                <div id="activitiesList" class="activities-list"></div>
+            </div>
+        </div>
+
+        <!-- أزرار الوصول السريع -->
+        <div class="quick-actions">
+            <button onclick="showAddOrderModal()">
+                <i class="fas fa-plus"></i>
+                طلب جديد
+            </button>
+            <button onclick="showAddShipmentModal()">
+                <i class="fas fa-plus"></i>
+                شحنة جديدة
+            </button>
+            <button onclick="exportData('json')">
+                <i class="fas fa-download"></i>
+                تصدير JSON
+            </button>
+            <button onclick="exportData('excel')">
+                <i class="fas fa-file-excel"></i>
+                تصدير Excel
+            </button>
+            <input type="file" id="importFile" accept=".json,.xlsx" style="display: none">
+            <button onclick="document.getElementById('importFile').click()">
+                <i class="fas fa-upload"></i>
+                استيراد
+            </button>
+        </div>
+    </div>
+
+    <!-- إضافة لوحة تحكم الإشعارات -->
+    <div id="notificationsPanel" class="notifications-panel hidden">
+        <div class="notifications-header">
+            <h3>الإشعارات</h3>
+            <div class="notifications-controls">
+                <button id="markAllRead" class="secondary-btn">
+                    <i class="fas fa-check-double"></i>
+                    تعليم الكل كمقروء
+                </button>
+                <button id="clearAllNotifications" class="secondary-btn">
+                    <i class="fas fa-trash"></i>
+                    مسح الكل
+                </button>
+                <button id="notificationsSettings" class="secondary-btn">
+                    <i class="fas fa-cog"></i>
+                    الإعدادات
+                </button>
+            </div>
+        </div>
+        <div class="notifications-filters">
+            <button class="filter-btn active" data-filter="all">الكل</button>
+            <button class="filter-btn" data-filter="orders">الطلبات</button>
+            <button class="filter-btn" data-filter="shipments">الشحنات</button>
+            <button class="filter-btn" data-filter="inventory">المخزون</button>
+            <button class="filter-btn" data-filter="seasonal">الخطط الموسمية</button>
+        </div>
+        <div class="notifications-list" id="notificationsList"></div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل الطلب -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">إضافة طلب جديد</h2>
+            <form id="orderForm">
+                <!-- رقم الطلب - عرض كامل -->
+                <div class="full-width">
+                    <input type="text" id="orderNumber" readonly placeholder="رقم الطلب">
+                </div>
+                
+                <!-- معلومات الشركة والبضاعة -->
+                <input type="text" id="supplierName" placeholder="اسم الشركة الموردة" required>
+                <input type="text" id="goodsType" placeholder="نوع البضاعة" required>
+                
+                <!-- معلومات الكمية -->
+                <input type="number" id="quantity" placeholder="الكمية" required>
+                <select id="unit" required>
+                    <option value="قطعة">قطعة</option>
+                    <option value="م">م</option>
+                </select>
+                
+                <!-- معلومات البكج والتواريخ -->
+                <input type="number" id="packageCount" placeholder="عدد البكج" required>
+                <input type="date" id="orderDate" required>
+                <input type="date" id="completionDate" placeholder="تاريخ الانتهاء" required>
+                
+                <!-- معلومات التكلفة -->
+                <input type="number" id="containerValue" placeholder="قيمة الحاوية" required>
+                <div id="priceComparisonInfo" style="margin-top:6px;font-size:0.95em;"></div>
+                <input type="number" id="bookingFees" placeholder="أجور حجز الحاوية" required>
+                
+                <!-- الحالة - عرض كامل -->
+                <div class="full-width">
+                    <select id="status" required>
+                        <option value="قيد التصنيع">قيد التصنيع</option>
+                        <option value="تم الشحن">تم الشحن</option>
+                    </select>
+                </div>
+                
+                <!-- زر الحفظ - عرض كامل -->
+                <button type="submit" id="submitOrder">حفظ الطلب</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل الشحنة -->
+    <div id="shipmentModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="shipmentModalTitle">إضافة شحنة جديدة</h2>
+            <form id="shipmentForm">
+                <div class="full-width">
+                    <input type="text" id="shipmentNumber" readonly placeholder="رقم الشحنة">
+                </div>
+                
+                <select id="orderSelect" required>
+                    <option value="">اختر رقم الطلب</option>
+                </select>
+                
+                <input type="text" id="blNumber" placeholder="رقم BL" required>
+                <input type="text" id="containerNumber" placeholder="رقم الحاوية" required>
+                
+                <input type="text" id="goodsTypeShipment" readonly>
+                <input type="number" id="quantityShipment" readonly>
+                <input type="text" id="unitShipment" readonly>
+                
+                <input type="date" id="shipmentDate" readonly>
+                <input type="date" id="arrivalDate" required>
+                
+                <input type="text" id="shippingCompany" placeholder="شركة الشحن" required>
+                
+                <div class="documents-upload">
+                    <label>المستندات:</label>
+                    <div class="documents-grid">
+                        <div class="document-box">
+                            <i class="fas fa-file-invoice"></i>
+                            <span>الفاتورة</span>
+                            <input type="file" id="invoice" name="invoice" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png" class="file-input">
+                            <div class="upload-status"></div>
+                        </div>
+                        <div class="document-box">
+                            <i class="fas fa-certificate"></i>
+                            <span>شهادة المنشأ</span>
+                            <input type="file" id="certificate" name="certificate" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png" class="file-input">
+                            <div class="upload-status"></div>
+                        </div>
+                        <div class="document-box">
+                            <i class="fas fa-file-contract"></i>
+                            <span>البوليصة</span>
+                            <input type="file" id="policy" name="policy" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png" class="file-input">
+                            <div class="upload-status"></div>
+                        </div>
+                        <div class="document-box">
+                            <i class="fas fa-list-alt"></i>
+                            <span>قائمة التعبئة</span>
+                            <input type="file" id="packingList" name="packingList" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png" class="file-input">
+                            <div class="upload-status"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <select id="shipmentStatus" required>
+                    <option value="في الطريق">في الطريق</option>
+                    <option value="تم الوصول">تم الوصول</option>
+                    <option value="تم الاستلام">تم الاستلام</option>
+                </select>
+                
+                <div class="full-width">
+                    <textarea id="shipmentNotes" placeholder="ملاحظات حول الشحنة" rows="3"></textarea>
+                </div>
+                
+                <button type="submit" id="submitShipment">حفظ الشحنة</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- إضافة نافذة تفاصيل الشحنة -->
+    <div id="shipmentDetailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDetailsModal()">&times;</span>
+            <div id="shipmentDetailsContent"></div>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل التخليص الجمركي -->
+    <div id="customsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="customsModalTitle">إضافة تخليص جمركي جديد</h2>
+            <form id="customsForm">
+                <div class="full-width">
+                    <input type="text" id="customsNumber" readonly placeholder="رقم التخليص">
+                </div>
+                
+                <select id="shipmentSelect" required>
+                    <option value="">اختر رقم الشحنة</option>
+                </select>
+                
+                <input type="text" id="customsCountry" placeholder="بلد التخليص" required>
+                
+                <input type="text" id="goodsTypeCustoms" readonly>
+                <input type="number" id="quantityCustoms" readonly>
+                
+                <input type="number" id="customsCost" placeholder="التكلفة الجمركية" required>
+                <input type="number" id="costPerMeter" readonly>
+                
+                <input type="date" id="startDate" required>
+                <input type="date" id="endDate" required>
+                
+                <input type="text" id="responsibleEmployee" placeholder="الموظف المسؤول" required>
+                
+                <button type="submit" id="submitCustoms">حفظ التخليص</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل التكلفة -->
+    <div id="costModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="costModalTitle">إضافة تكلفة إضافية جديدة</h2>
+            <form id="costForm">
+                <select id="shipmentSelectCost" required>
+                    <option value="">اختر رقم الشحنة</option>
+                </select>
+                
+                <input type="text" id="costDescription" placeholder="وصف التكلفة" required>
+                <input type="number" id="costValue" placeholder="قيمة التكلفة" required>
+                <input type="number" id="costPerMeterValue" readonly>
+                
+                <button type="submit" id="submitCost">حفظ التكلفة</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل المخزون -->
+    <div id="inventoryModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="inventoryModalTitle">إضافة مخزون جديد</h2>
+            <form id="inventoryForm">
+                <div class="full-width">
+                    <input type="text" id="inventoryNumber" readonly placeholder="رقم الجرد">
+                </div>
+                
+                <select id="shipmentSelectInventory" required>
+                    <option value="">اختر رقم الشحنة</option>
+                </select>
+                
+                <input type="text" id="goodsTypeInventory" placeholder="نوع البضاعة" required>
+                <input type="number" id="importedQuantity" placeholder="الكمية المستوردة" required>
+                <input type="number" id="receivedQuantity" placeholder="الكمية المستلمة" required>
+                
+                <select id="branch" required>
+                    <option value="">اختر فرع الاستلام</option>
+                    <option value="الحسكة">الحسكة</option>
+                    <option value="الرقة">الرقة</option>
+                    <option value="حلب">حلب</option>
+                    <option value="دير الزور">دير الزور</option>
+                    <option value="منبج">منبج</option>
+                    <option value="أخرى">أخرى</option>
+                </select>
+                
+                <div id="otherBranchContainer" class="hidden">
+                    <input type="text" id="otherBranch" placeholder="اسم الفرع">
+                </div>
+                
+                <input type="number" id="totalContainerCost" readonly>
+                <input type="number" id="finalUnitCost" readonly>
+                <input type="number" id="purchasePrice" placeholder="سعر الشراء" step="0.001" required>
+                <input type="number" id="costPrice" readonly>
+                <input type="number" id="sellingPrice" readonly>
+                <input type="text" id="inventoryStatus" readonly placeholder="حالة المطابقة">
+                
+                <button type="submit" id="submitInventory">حفظ المخزون</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- قسم خطط الشراء الموسمية -->
+    <div id="seasonalPlansSection" class="tab-content hidden">
+        <div class="seasonal-plans-container">
+            <!-- رأس القسم مع الإحصائيات -->
+            <div class="seasonal-plans-header">
+                <div class="header-main">
+                    <h1>إدارة خطط الشراء الموسمية</h1>
+                    <button id="addSeasonalPlanBtn" class="primary-btn">
+                        <i class="fas fa-plus"></i>
+                        إضافة خطة جديدة
+                    </button>
+                </div>
+                
+                <!-- إحصائيات سريعة -->
+                <div class="seasonal-stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-calendar-check"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="activePlansCount">0</span>
+                            <span class="stat-label">خطط نشطة</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-box"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalProductsCount">0</span>
+                            <span class="stat-label">إجمالي المنتجات</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-shipping-fast"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="upcomingShipmentsCount">0</span>
+                            <span class="stat-label">شحنات قادمة</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- أدوات البحث والتصفية -->
+            <div class="seasonal-filters-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="seasonalSearchInput" placeholder="بحث عن خطة أو مورد...">
+                </div>
+                
+                <div class="filters-group">
+                    <select id="seasonFilter" class="filter-select">
+                        <option value="all">جميع المواسم</option>
+                        <option value="صيفي">صيفي</option>
+                        <option value="شتوي">شتوي</option>
+                    </select>
+                    
+                    <select id="yearFilter" class="filter-select">
+                        <option value="all">جميع السنوات</option>
+                    </select>
+                    
+                    <select id="statusFilter" class="filter-select">
+                        <option value="all">جميع الحالات</option>
+                        <option value="قيد التنفيذ">قيد التنفيذ</option>
+                        <option value="مكتملة">مكتملة</option>
+                        <option value="ملغاة">ملغاة</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- عرض الخطط -->
+            <div class="seasonal-plans-grid" id="seasonalPlansGrid">
+                <!-- سيتم إضافة البطاقات هنا ديناميكياً -->
+            </div>
+
+            <!-- جدول المنتجات المرتبطة بالخطة المحددة -->
+            <div id="productsTimelineContainer" class="hidden">
+                <div class="timeline-header">
+                    <div class="timeline-title">
+                        <h2>الجدول الزمني للمنتجات</h2>
+                        <span id="timelineSupplierName" class="supplier-name"></span>
+                    </div>
+                    <div class="timeline-controls">
+                        <button id="toggleTimelineBtn" class="secondary-btn">
+                            <i class="fas fa-chevron-up"></i>
+                            إخفاء الجدول
+                        </button>
+                        <button id="exportTimelineBtn" class="secondary-btn">
+                            <i class="fas fa-download"></i>
+                            تصدير
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="timeline-content">
+                    <div id="productsTimelineList" class="timeline-list">
+                        <!-- سيتم إضافة المنتجات هنا ديناميكياً -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل خطة شراء موسمية -->
+    <div id="seasonalPlanModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeSeasonalPlanModal">&times;</span>
+            <h2 id="seasonalPlanModalTitle">إضافة خطة شراء موسمية</h2>
+            <form id="seasonalPlanForm">
+                <select id="season" required>
+                    <option value="صيفي">صيفي</option>
+                    <option value="شتوي">شتوي</option>
+                </select>
+                <input type="number" id="planYear" placeholder="السنة" required>
+                <input type="text" id="planSupplier" placeholder="اسم المورد" required>
+                <textarea id="planNotes" placeholder="ملاحظات عامة"></textarea>
+                <select id="planStatus">
+                    <option value="قيد التنفيذ">قيد التنفيذ</option>
+                    <option value="مكتملة">مكتملة</option>
+                    <option value="ملغاة">ملغاة</option>
+                </select>
+                <button type="submit">حفظ الخطة</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل منتج في الخطة -->
+    <div id="seasonalProductModal" class="modal">
+        <div class="modal-content improved-modal">
+            <span class="close" id="closeSeasonalProductModal">&times;</span>
+            <h2 id="seasonalProductModalTitle"><i class="fas fa-plus-circle" style="color:#2a7a7b;"></i> إضافة منتج للخطة</h2>
+            <form id="seasonalProductForm" style="display:flex;flex-direction:column;gap:22px;">
+                <!-- بيانات المنتج -->
+                <fieldset class="form-section">
+                    <legend><i class="fas fa-box"></i> بيانات المنتج</legend>
+                <div class="form-row-vertical">
+                        <label class="input-label" for="productName"><i class="fas fa-tag"></i> اسم المنتج</label>
+                        <input type="text" id="productName" placeholder="مثال: سكر برازيلي" required>
+                </div>
+                <div class="form-row-vertical">
+                        <label class="input-label" for="productSpecs"><i class="fas fa-info-circle"></i> المواصفات <span style="color:#888;font-size:0.9em;">(مثال: لون، مقاس...)</span></label>
+                    <input type="text" id="productSpecs" placeholder="المواصفات (مثال: لون، مقاس...)" required>
+                </div>
+                <div class="form-row-vertical">
+                        <label class="input-label" for="productPrice"><i class="fas fa-dollar-sign"></i> السعر <span style="color:#888;font-size:0.9em;">(بالدولار)</span></label>
+                    <input type="number" id="productPrice" placeholder="سعر المنتج" step="0.01" min="0" required>
+                </div>
+                </fieldset>
+                <!-- بيانات الحاويات -->
+                <fieldset class="form-section">
+                    <legend><i class="fas fa-shipping-fast"></i> بيانات الحاويات</legend>
+                <div class="form-row-vertical">
+                        <label class="input-label" for="productContainers"><i class="fas fa-cubes"></i> عدد الحاويات</label>
+                    <input type="number" id="productContainers" placeholder="عدد الحاويات" min="1" value="1" required>
+                </div>
+                <div class="form-row-vertical" style="align-items:center;">
+                    <div id="containerDatesWrapper" class="container-grid-wrapper" style="width:100%;max-width:420px;margin:0 auto;"></div>
+                </div>
+                </fieldset>
+                <!-- ملاحظات -->
+                <fieldset class="form-section">
+                    <legend><i class="fas fa-sticky-note"></i> ملاحظات</legend>
+                <div class="form-row-vertical">
+                        <label class="input-label" for="productNotes"><i class="fas fa-comment-dots"></i> ملاحظات إضافية</label>
+                        <textarea id="productNotes" placeholder="أي ملاحظات تخص المنتج أو الحاويات..." style="width:100%;min-height:50px;"></textarea>
+                </div>
+                </fieldset>
+                <button type="submit" class="primary-btn" style="width:100%;margin-top:10px;font-size:1.15em;"><i class="fas fa-save"></i> حفظ المنتج</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- نموذج إضافة/تعديل إعدادات الإشعارات -->
+    <div id="notificationsSettingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>إعدادات الإشعارات</h2>
+            <form id="notificationsSettingsForm">
+                <div class="settings-group">
+                    <h3>الإشعارات الصوتية</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="enableSoundNotifications" checked>
+                            تفعيل الإشعارات الصوتية
+                        </label>
+                        <select id="notificationSound" class="sound-select">
+                            <option value="default">الصوت الافتراضي</option>
+                            <option value="bell">جرس</option>
+                            <option value="chime">نغمة</option>
+                            <option value="alert">تنبيه</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3>إشعارات سطح المكتب</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="enableDesktopNotifications">
+                            تفعيل إشعارات سطح المكتب
+                        </label>
+                        <button type="button" id="requestNotificationPermission" class="secondary-btn">
+                            طلب الإذن
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3>إشعارات WhatsApp</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="enableWhatsAppNotifications">
+                            تفعيل إشعارات WhatsApp
+                        </label>
+                        <input type="tel" id="whatsappNumber" placeholder="رقم WhatsApp (مثال: 963XXXXXXXX)" pattern="[0-9]+">
+                        <div class="whatsapp-status" id="whatsappStatus"></div>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3>أنواع الإشعارات</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="notifyNewOrders" checked>
+                            إشعارات الطلبات الجديدة
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="notifyShipments" checked>
+                            إشعارات الشحنات
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="notifyInventory" checked>
+                            إشعارات المخزون
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="notifySeasonalPlans" checked>
+                            إشعارات الخطط الموسمية
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="primary-btn">حفظ الإعدادات</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- إضافة مودال المهام -->
+    <div id="orderTasksModal" class="modal">
+      <div class="modal-content">
+        <span class="close" id="closeOrderTasksModal">&times;</span>
+        <h2>مهام الطلب</h2>
+        <div id="orderTasksList"></div>
+        <form id="addOrderTaskForm" style="margin-top:16px;display:flex;gap:8px;">
+          <input type="text" id="newOrderTaskTitle" placeholder="عنوان المهمة" required style="flex:1;">
+          <button type="submit" class="primary-btn">إضافة</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- إضافة مودال المهام للشحنات -->
+    <div id="shipmentTasksModal" class="modal">
+      <div class="modal-content">
+        <span class="close" id="closeShipmentTasksModal">&times;</span>
+        <h2>مهام الشحنة</h2>
+        <div id="shipmentTasksList"></div>
+        <form id="addShipmentTaskForm" style="margin-top:16px;display:flex;gap:8px;">
+          <input type="text" id="newShipmentTaskTitle" placeholder="عنوان المهمة" required style="flex:1;">
+          <button type="submit" class="primary-btn">إضافة</button>
+        </form>
+      </div>
+    </div>
+
+    <style>
+        /* تنسيقات قسم خطط الشراء الموسمية */
+        .seasonal-plans-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .seasonal-plans-header {
+            margin-bottom: 24px;
+        }
+
+        .header-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header-main h1 {
+            font-size: 1.8rem;
+            color: #2a7a7b;
+            margin: 0;
+        }
+
+        /* تنسيقات الإحصائيات */
+        .seasonal-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-card i {
+            font-size: 1.8rem;
+            color: #2a7a7b;
+            background: #f0f9f9;
+            padding: 12px;
+            border-radius: 10px;
+        }
+
+        .stat-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* تنسيقات البحث والتصفية */
+        .seasonal-filters-container {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .search-box i {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 40px 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .filters-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+        }
+
+        .filter-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            background: #fff;
+        }
+
+        /* تنسيقات شبكة الخطط */
+        .seasonal-plans-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .plan-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .plan-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .plan-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2a7a7b;
+        }
+
+        .plan-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .plan-status.active { background: #e3f2fd; color: #1976d2; }
+        .plan-status.completed { background: #e8f5e9; color: #2e7d32; }
+        .plan-status.cancelled { background: #ffebee; color: #c62828; }
+
+        .plan-details {
+            margin-bottom: 16px;
+        }
+
+        .plan-detail-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .plan-detail-label {
+            color: #666;
+        }
+
+        .plan-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .plan-actions button {
+            flex: 1;
+            min-width: 100px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+        .plan-actions button:hover {
+            opacity: 0.9;
+        }
+
+        .plan-actions button.edit { background: #2196F3; color: #fff; }
+        .plan-actions button.delete { background: #f44336; color: #fff; }
+        .plan-actions button.products { background: #4CAF50; color: #fff; }
+
+        /* تنسيقات الجدول الزمني */
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .timeline-title {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .timeline-title h2 {
+            font-size: 1.4rem;
+            color: #2a7a7b;
+            margin: 0;
+        }
+
+        .supplier-name {
+            font-size: 1.1rem;
+            color: #666;
+        }
+
+        .timeline-controls {
+            display: flex;
+            gap: 12px;
+        }
+
+        .timeline-content {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .timeline-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* تنسيقات للأجهزة المحمولة */
+        @media (max-width: 768px) {
+            .seasonal-plans-container {
+                padding: 16px;
+            }
+
+            .header-main {
+                flex-direction: column;
+                gap: 16px;
+                align-items: stretch;
+            }
+
+            .header-main h1 {
+                font-size: 1.5rem;
+                text-align: center;
+            }
+
+            .seasonal-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .stat-card {
+                padding: 12px;
+            }
+
+            .stat-card i {
+                font-size: 1.4rem;
+                padding: 8px;
+            }
+
+            .stat-value {
+                font-size: 1.2rem;
+            }
+
+            .filters-group {
+                grid-template-columns: 1fr;
+            }
+
+            .seasonal-plans-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .timeline-header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+
+            .timeline-controls {
+                flex-direction: column;
+            }
+
+            .timeline-controls button {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .seasonal-stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .plan-actions {
+                flex-direction: column;
+            }
+
+            .plan-actions button {
+                width: 100%;
+            }
+        }
+
+        /* تحسين تجاوب الجداول لجميع التبويبات */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 24px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        th, td {
+            padding: 10px 8px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+            font-size: 0.98rem;
+        }
+        th {
+            background: #f7f7f7;
+            color: #2a7a7b;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        @media (max-width: 900px) {
+            table {
+                min-width: 600px;
+            }
+            th, td {
+                font-size: 0.93rem;
+                padding: 8px 4px;
+            }
+        }
+        @media (max-width: 600px) {
+            table {
+                font-size: 0.92rem;
+                min-width: 480px;
+            }
+            th, td {
+                padding: 7px 2px;
+            }
+        }
+    </style>
+
+    <script src="app.js"></script>
+</body>
+</html>
